@@ -6,22 +6,27 @@
 # Markdown authoring validation, driven by the repo's .markdownlint.json config
 # (the same rules the Microsoft "Docs Authoring Pack" applies). This installs the
 # markdownlint-cli2 linter used for that flow.
+#
+# The linter is installed into /usr/local (a stable system prefix that is always
+# on PATH and captured by the environment snapshot). npm's global prefix in the
+# base image points at "/" and the Node toolchain lives under an nvm directory,
+# so we install with an explicit --prefix using absolute node/npm paths via sudo.
 set -euo pipefail
 
 MARKDOWNLINT_CLI2_VERSION="0.23.3"
+INSTALL_PREFIX="/usr/local"
+BIN="${INSTALL_PREFIX}/bin/markdownlint-cli2"
 
-# npm's global prefix is misconfigured to "/" in this base image, so derive the
-# active (user-writable, already-on-PATH) Node prefix from the npm binary itself.
-NPM_BIN="$(command -v npm)"
-NODE_PREFIX="$(dirname "$(dirname "$NPM_BIN")")"
-
-echo "Using Node prefix: $NODE_PREFIX"
-
-if markdownlint-cli2 --version 2>/dev/null | grep -q "v${MARKDOWNLINT_CLI2_VERSION}"; then
-  echo "markdownlint-cli2 v${MARKDOWNLINT_CLI2_VERSION} already installed; skipping."
+if [ -x "$BIN" ] && "$BIN" --version 2>/dev/null | grep -q "v${MARKDOWNLINT_CLI2_VERSION}"; then
+  echo "markdownlint-cli2 v${MARKDOWNLINT_CLI2_VERSION} already installed at ${BIN}; skipping."
 else
-  echo "Installing markdownlint-cli2@${MARKDOWNLINT_CLI2_VERSION}..."
-  npm install -g --prefix "$NODE_PREFIX" "markdownlint-cli2@${MARKDOWNLINT_CLI2_VERSION}"
+  NODE_BIN="$(command -v node)"
+  NPM_CLI="$(readlink -f "$(command -v npm)")"
+  echo "Installing markdownlint-cli2@${MARKDOWNLINT_CLI2_VERSION} into ${INSTALL_PREFIX} ..."
+  echo "  node: ${NODE_BIN}"
+  echo "  npm : ${NPM_CLI}"
+  sudo "$NODE_BIN" "$NPM_CLI" install -g --prefix "$INSTALL_PREFIX" \
+    "markdownlint-cli2@${MARKDOWNLINT_CLI2_VERSION}"
 fi
 
-echo "Installed: $(markdownlint-cli2 --version 2>/dev/null | head -1)"
+echo "Installed: $("$BIN" --version 2>/dev/null | head -1)"
